@@ -1,9 +1,11 @@
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory=$true)][ValidateSet('Relais','Agent')][string]$Role,
+    [Parameter(Mandatory=$true)][ValidateSet('Acces','Pont','Relais','Agent')][string]$Role,
     [switch]$EffacerConfiguration
 )
 $ErrorActionPreference = 'Stop'
+$Role = switch ($Role) { 'Acces' { 'Relais' } 'Pont' { 'Agent' } default { $Role } }
+$displayRole = if ($Role -eq 'Relais') { 'Acces chez vous' } else { 'Pont chez le client' }
 $base = [IO.Path]::GetFullPath((Join-Path $env:LOCALAPPDATA 'ConnexionPont'))
 $application = [IO.Path]::GetFullPath((Join-Path $base "Applications\$Role"))
 if (-not $application.StartsWith($base + [IO.Path]::DirectorySeparatorChar,[StringComparison]::OrdinalIgnoreCase)) { throw 'Chemin inattendu.' }
@@ -16,8 +18,10 @@ foreach ($name in @($exeName,"$exeName.config",'README.md','INSTALLATION.md','LI
 }
 if ((Test-Path -LiteralPath $application) -and @(Get-ChildItem -LiteralPath $application -Force).Count -eq 0) { Remove-Item -LiteralPath $application }
 foreach ($folder in @([Environment]::GetFolderPath('Desktop'),(Join-Path ([Environment]::GetFolderPath('Programs')) 'ConnexionPont'),[Environment]::GetFolderPath('Startup'))) {
-    $shortcut = Join-Path $folder "ConnexionPont - $Role.lnk"
-    if (Test-Path -LiteralPath $shortcut) { Remove-Item -LiteralPath $shortcut -Force }
+    foreach ($label in @($Role,$displayRole)) {
+        $shortcut = Join-Path $folder "ConnexionPont - $label.lnk"
+        if (Test-Path -LiteralPath $shortcut) { Remove-Item -LiteralPath $shortcut -Force }
+    }
 }
 if ($EffacerConfiguration) {
     foreach ($name in @('settings.bin','settings.bin.new')) {

@@ -29,3 +29,11 @@ Les deux interfaces WinForms ont également été construites et rendues localem
 - Installation et désinstallation avec les droits du poste cible ; EXE non signés et politiques locales.
 
 V0.1 : pas d'audit indépendant et pas de validation de production implicite.
+
+## V0.2 — accès web et lancement sans installation
+
+Le parcours de tests couvre aussi SOCKS5 IPv4 / nom DNS, refus des destinations et ports non autorisés, migration des profils V0.1, conflit de ports, conservation des en-têtes HTTP et cookies sur les deux routes web, douze requêtes simultanées et reprise HTTP après reconnexion. Si Edge / Chrome est installé, le navigateur réel est lancé en mode headless avec le même lanceur et les mêmes URL pour vérifier qu'il utilise le tunnel.
+
+Les résultats à jour sont publiés dans le workflow Windows du dépôt et dans son journal de tests. Le ZIP n'est produit par ce workflow que si les contrôles passent. Les tests utilisent des services locaux simulant les applications ; les URL et authentifications réelles du client restent à qualifier sur son réseau.
+
+L'interface et le guide distinguent le poste Accès chez l'utilisateur et le PC de pont chez le client. Le pont dispose d'une procédure par EXE portable sans installateur ni droits administrateur, sous réserve de .NET Framework 4.8 déjà installé et des autorisations réseau existantes. Aucun paramètre du poste client n'est modifié automatiquement.

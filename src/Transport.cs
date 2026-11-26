@@ -14,6 +14,8 @@ namespace RdpTunnel
 {
     public sealed class Wire : IDisposable
     {
+        public const string Protocol = "RDT2";
+        public const int MaxSessions = 32;
         public readonly TcpClient Socket;
         public readonly SslStream Stream;
         private readonly object writeLock = new object();

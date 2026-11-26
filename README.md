@@ -1,62 +1,45 @@
-# ConnexionPont
+# ConnexionPont V0.2
 
-Application Windows permettant au PC d'un client d'établir un tunnel inverse vers votre PC, derrière une Freebox avec IP publique fixe. Depuis chez vous, utilisez le Bureau à distance vers le PC client et SSH vers un serveur interne joignable par ce PC.
+Depuis votre PC, accédez au PC de pont chez le client en RDP, à un serveur interne en SSH et à deux applications web sur les ports 8080 / 8090. Le PC de pont établit une connexion sortante TLS vers votre IP publique fixe.
 
-| Programme | Où le lancer | Fonction |
+| Machine | Fenêtre | EXE (nom technique conservé) |
 | --- | --- | --- |
-| `ConnexionPont.Relais.exe` | Votre PC, chez vous | Écoute du tunnel et accès locaux RDP / SSH |
-| `ConnexionPont.Agent.exe` | PC Windows chez le client | Connexion sortante vers votre IP et accès aux deux destinations autorisées |
+| Votre PC, chez vous | Accès chez vous | ConnexionPont.Relais.exe |
+| PC de pont, chez le client | Pont chez le client | ConnexionPont.Agent.exe |
 
-Les destinations sont le RDP du PC agent (`127.0.0.1:3389`) et le serveur SSH renseigné dans le profil (port `22`). Le relais ne propose pas de proxy général ni de commandes à distance.
+## Installation et lancement portable
 
-## Installation
+Lire [INSTALLATION.md](INSTALLATION.md), notamment la section **PC de pont sans installation ni droits administrateur**. Le ZIP contient les deux EXE et leurs `.config`, les scripts facultatifs et le guide.
 
-Lire [INSTALLATION.md](INSTALLATION.md). La livraison Windows contient les deux EXE, leurs fichiers `.config`, les scripts PowerShell et le guide. .NET Framework 4.8 est requis ; aucun package NuGet, Chisel, VPN ou serveur cloud n'est nécessaire.
+.NET Framework 4.8 doit déjà être présent. L'agent fonctionne sans installation. RDP doit être déjà activé et autorisé sur le pont si vous souhaitez son bureau. Le diagnostic SSH et web ne nécessite pas d'activer RDP.
 
-Les exécutables sont des applications visibles. Le tunnel s'arrête à la fermeture de la fenêtre ou à la fermeture de session Windows. L'agent essaie de se reconnecter si la connexion est interrompue. La V0.1 n'est pas un service Windows.
-
-## Depuis votre terminal
-
-Après connexion de l'agent :
+## Accès depuis chez vous
 
 ```powershell
-# RDP vers le PC du client
 mstsc /v:127.0.0.1:13389
-
-# SSH vers le serveur interne (son port reste 22)
 ssh -p 10022 utilisateur@127.0.0.1
-
-# Avec une clé SSH conservée sur votre PC
-ssh -i C:\Users\vous\.ssh\id_ed25519 -p 10022 utilisateur@127.0.0.1
 ```
 
-Le bouton **Copier la commande SSH** ajoute `HostKeyAlias` avec l'identifiant d'appairage afin de distinguer les clés SSH lorsque plusieurs profils sont utilisés successivement. Vérifiez toujours l'empreinte SSH du serveur lors de la première connexion.
+Pour le web : renseigner **Serveur web interne** dans la fenêtre Accès, enregistrer, exporter le profil puis l'importer sur le pont. Cliquer **Web 8080** ou **Web 8090** ouvre Edge / Chrome dans un profil dédié au tunnel. Les URL et les en-têtes Host d'origine sont conservés. Vous pouvez ensuite saisir ces mêmes URL dans cette fenêtre.
+
+Le proxy SOCKS5 écoute uniquement sur `127.0.0.1:1080` et n'autorise que le serveur web du profil sur les ports 8080 et 8090. Aucun réglage proxy global ni nouvelle redirection Freebox n'est nécessaire. La fenêtre dédiée sert à ces applications internes ; le navigateur habituel conserve ses paramètres.
+
+## Mise à jour de V0.1
+
+Mettre à jour **les deux EXE et leurs .config**, arrêter puis relancer les applications. Les configurations et certificats sont conservés. Renseigner le serveur web sur le poste Accès, puis exporter/réimporter le profil sur le pont. V0.2 utilise le protocole RDT2 ; les deux côtés doivent être à jour.
 
 ## Compilation et tests
-
-Depuis Windows 64 bits avec .NET Framework 4.8 installé :
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\build.ps1
 ```
 
-Le compilateur C# Windows intégré est utilisé ; Visual Studio et un SDK .NET récent ne sont pas nécessaires. Le script exécute les tests avant de produire `dist\ConnexionPont-Windows-v0.1.0.zip`. Les tests réseau requièrent des connexions TCP locales autorisées. Un workflow GitHub Windows lance la même compilation et les tests.
+La compilation utilise le compilateur C# de Windows, sans package NuGet. Le ZIP est produit dans `dist\ConnexionPont-Windows-v0.2.0.zip` après les tests. Le workflow GitHub Windows vérifie TLS, les routes RDP/SSH/web, les hôtes autorisés, la reprise et, si présent, un navigateur Chromium réel en mode headless. Voir [docs/VALIDATION.md](docs/VALIDATION.md).
 
-## Protection des accès
+## Protection et limites
 
-- TLS 1.2 par `SslStream` / Schannel, certificats RSA 3072 et authentification mutuelle ; chaque côté vérifie l'empreinte SHA-256 exacte du certificat distant et sa période de validité.
-- Les ports RDP et SSH du relais écoutent exclusivement sur `127.0.0.1`.
-- Le profil portable agent est chiffré : PBKDF2-SHA256 (200 000 itérations), AES-256-CBC et HMAC-SHA256, vérifié avant déchiffrement. Mot de passe d'au moins 12 caractères.
-- Les configurations enregistrées localement sont chiffrées par DPAPI pour le compte Windows courant. Aucun certificat racine n'est installé et aucune clé privée relais n'est exportée vers l'agent.
-- Le tunnel conserve l'authentification native RDP / SSH. Aucun mot de passe Windows ou SSH n'est enregistré par ConnexionPont.
-- Une seule identité agent connectée à la fois ; huit sessions de données simultanées au maximum. Les certificats expirent après deux ans ; réappairer avant l'expiration.
+TLS 1.2 / Schannel, certificats RSA 3072 appairés et vérifiés par empreinte SHA-256 ; stockage local DPAPI pour le compte Windows courant. Le profil portable est protégé par PBKDF2-SHA256, AES-256-CBC et HMAC-SHA256. Aucun mot de passe RDP/SSH n'est enregistré. Le certificat privé du poste Accès n'est jamais exporté vers le pont.
 
-## Limites de cette version
+Les accès RDP, SSH et proxy web écoutent uniquement en boucle locale ; 32 flux de données simultanés maximum. Un seul pont appairé connecté à la fois. Les fenêtres doivent rester ouvertes et les sessions Windows actives. Fermer une fenêtre coupe le tunnel ; les connexions sont réessayées automatiquement après une panne réseau.
 
-La V0.1 est une première version à qualifier sur votre Freebox et le réseau du client. Les tests automatisés utilisent deux destinations TCP de test et vérifient le transport : ils ne remplacent pas une connexion réelle à `mstsc` ou à un serveur SSH d'entreprise. Pas d'audit de sécurité indépendant, signature Authenticode, MSI, service Windows, administration multi-clients ou bascule automatique vers un relais cloud.
-
-Le transport est du **TLS direct sur TCP**, et non un protocole HTTPS/WebSocket. Un proxy HTTP obligatoire, une inspection TLS, une politique de sortie ou un antivirus peuvent empêcher son fonctionnement. Le port 443 seul ne garantit pas l'acceptation de la connexion ; faire autoriser le trafic adapté. La validation des certificats n'est jamais désactivée.
-
-L'installation et la mise en réseau s'effectuent dans le cadre des accès autorisés par le client.
-
-Voir également [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) et [docs/VALIDATION.md](docs/VALIDATION.md).
+Le transport sortant du pont est du TLS direct sur TCP, sans HTTP CONNECT : le réseau du client doit l'autoriser. La V0.2 reste à qualifier sur votre Freebox et les applications réelles ; elle n'est pas un service Windows, les EXE ne sont pas signés Authenticode et aucun audit indépendant n'a été réalisé. Voir [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).

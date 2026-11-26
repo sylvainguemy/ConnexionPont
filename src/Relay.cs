@@ -11,7 +11,7 @@ namespace RdpTunnel
 {
     public sealed class Relay : Engine
     {
-        private TcpListener incoming, rdp, ssh;
+        private TcpListener incoming, rdp, ssh, web;
         private readonly X509Certificate2 identity;
         private readonly object controlLock = new object();
         private Wire control;
@@ -37,7 +37,8 @@ namespace RdpTunnel
                 incoming = new TcpListener(IPAddress.Any, Config.ListenPort); incoming.Start(32);
                 rdp = new TcpListener(IPAddress.Loopback, Config.LocalRdpPort); rdp.Start(8);
                 if (!string.IsNullOrWhiteSpace(Config.SshHost)) { ssh = new TcpListener(IPAddress.Loopback, Config.LocalSshPort); ssh.Start(8); }
-                AcceptIncoming(); AcceptLocal(rdp, "RDP"); if (ssh != null) AcceptLocal(ssh, "SSH");
+                if (!string.IsNullOrWhiteSpace(Config.WebHost)) { web = new TcpListener(IPAddress.Loopback, Config.LocalWebProxyPort); web.Start(32); }
+                AcceptIncoming(); AcceptLocal(rdp, "RDP"); if (ssh != null) AcceptLocal(ssh, "SSH"); if (web != null) AcceptLocal(web, "SOCKS");
                 Log("Relais démarré : écoute TCP " + Config.ListenPort + ". En attente de l'agent.");
             }
             catch { Stop(); throw; }
@@ -67,7 +68,7 @@ namespace RdpTunnel
                 wire = Authenticate(socket, identity, Config.AgentHash, true);
                 var header = wire.Read();
                 handshakes.Release(); slot = false;
-                if (header == "RDT1 CONTROL")
+                if (header == Wire.Protocol + " CONTROL")
                 {
                     lock (controlLock)
                     {
@@ -75,7 +76,7 @@ namespace RdpTunnel
                         control = wire;
                     }
                     wire.Stream.ReadTimeout = 45000;
-                    wire.Send("READY"); Log("Agent authentifié. RDP et SSH disponibles selon la configuration.");
+                    wire.Send("READY"); Log("Pont authentifié. Accès RDP, SSH et web disponibles selon le profil.");
                     try
                     {
                         while (!IsStopped)
@@ -96,7 +97,7 @@ namespace RdpTunnel
                         Log("Agent déconnecté. Attente de sa reconnexion.");
                     }
                 }
-                else if (header.StartsWith("RDT1 DATA ", StringComparison.Ordinal))
+                else if (header.StartsWith(Wire.Protocol + " DATA ", StringComparison.Ordinal))
                 {
                     var id = header.Substring(10); Guid parsed; Pending request;
                     if (!Guid.TryParseExact(id, "N", out parsed) || !pending.TryGetValue(id, out request))
@@ -106,7 +107,7 @@ namespace RdpTunnel
                     if (!request.Ready.TrySetResult(wire)) throw new IOException("Session déjà associée.");
                     await request.Finished.Task.ConfigureAwait(false);
                 }
-                else throw new InvalidDataException("Protocole inconnu.");
+                else throw new InvalidDataException("Protocole incompatible : mettre à jour les deux EXE vers la V0.2.");
             }
             catch (Exception error) { Report("Connexion relais", error); }
             finally { if (slot) handshakes.Release(); if (wire != null) wire.Dispose(); Untrack(socket); }
@@ -119,7 +120,7 @@ namespace RdpTunnel
                 try
                 {
                     var socket = await listener.AcceptTcpClientAsync().ConfigureAwait(false); Track(socket);
-                    if (Interlocked.Increment(ref active) > 8) { Interlocked.Decrement(ref active); Untrack(socket); continue; }
+                    if (Interlocked.Increment(ref active) > Wire.MaxSessions) { Interlocked.Decrement(ref active); Untrack(socket); continue; }
                     Task.Run(() => HandleLocal(socket, service));
                 }
                 catch (Exception error) { Report("Écoute locale", error); if (!IsStopped) Stop(); }
@@ -129,8 +130,15 @@ namespace RdpTunnel
         private async Task HandleLocal(TcpClient socket, string service)
         {
             var id = Guid.NewGuid().ToString("N"); var request = new Pending(); Wire data = null;
+            bool proxy = service == "SOCKS", proxyReady = false;
             try
             {
+                if (proxy)
+                {
+                    var stream = socket.GetStream(); stream.ReadTimeout = 5000; stream.WriteTimeout = 5000;
+                    service = Socks5.Negotiate(stream, Config.WebHost);
+                    stream.ReadTimeout = Timeout.Infinite; stream.WriteTimeout = 10000;
+                }
                 lock (controlLock)
                 {
                     if (control == null) throw new IOException("L'agent n'est pas connecté.");
@@ -142,10 +150,17 @@ namespace RdpTunnel
                     throw new TimeoutException("Le PC client n'a pas ouvert la destination " + service + ".");
                 data = await wait.ConfigureAwait(false);
                 data.Stream.ReadTimeout = System.Threading.Timeout.Infinite;
-                data.Send("GO"); Log(service + " : session ouverte.");
+                data.Send("GO");
+                if (proxy) { Socks5.Reply(socket.GetStream(), 0); proxyReady = true; }
+                Log(service + " : session ouverte.");
                 await Bridge(socket.GetStream(), data.Stream, delegate { socket.Close(); data.Dispose(); }).ConfigureAwait(false);
             }
-            catch (Exception error) { Report(service, error); }
+            catch (Exception error)
+            {
+                if (proxy && !proxyReady && !(error is ProxyRejectedException))
+                    try { Socks5.Reply(socket.GetStream(), 4); } catch { }
+                Report(service, error);
+            }
             finally
             {
                 Pending removed; pending.TryRemove(id, out removed);
@@ -159,7 +174,7 @@ namespace RdpTunnel
         public override void Stop()
         {
             base.Stop();
-            if (incoming != null) incoming.Stop(); if (rdp != null) rdp.Stop(); if (ssh != null) ssh.Stop();
+            if (incoming != null) incoming.Stop(); if (rdp != null) rdp.Stop(); if (ssh != null) ssh.Stop(); if (web != null) web.Stop();
             lock (controlLock) { if (control != null) control.Dispose(); control = null; }
             foreach (var request in pending.Values) { request.Ready.TrySetCanceled(); request.Finished.TrySetResult(true); }
         }
