@@ -1,0 +1,8 @@
+artifacts/
+dist/
+*.pfx
+*.rdptunnel
+*.bin
+*.new
+test-output/
+CryptoProbe.exe
