@@ -1,0 +1,31 @@
+name: Windows - tests et livraison
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Tests TLS, RDP, SSH et compilation
+        shell: powershell
+        run: .\scripts\build.ps1
+      - name: Livraison Windows
+        uses: actions/upload-artifact@v7
+        with:
+          name: ConnexionPont-Windows-v0.1.0
+          path: dist/ConnexionPont-Windows-v0.1.0.zip
+          if-no-files-found: error
+      - name: Journaux des tests
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: tests
+          path: artifacts/test-results.txt
+          if-no-files-found: ignore
