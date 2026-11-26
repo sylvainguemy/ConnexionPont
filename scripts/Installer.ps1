@@ -1,9 +1,11 @@
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory=$true)][ValidateSet('Relais','Agent')][string]$Role,
+    [Parameter(Mandatory=$true)][ValidateSet('Acces','Pont','Relais','Agent')][string]$Role,
     [switch]$DemarrerALOuvertureSession
 )
 $ErrorActionPreference = 'Stop'
+$Role = switch ($Role) { 'Acces' { 'Relais' } 'Pont' { 'Agent' } default { $Role } }
+$displayRole = if ($Role -eq 'Relais') { 'Acces chez vous' } else { 'Pont chez le client' }
 $frameworkRelease = (Get-ItemProperty -LiteralPath 'HKLM:\SOFTWARE\Microsoft\NET Framework Setup\NDP\v4\Full' -Name Release -ErrorAction Stop).Release
 if ($frameworkRelease -lt 528040) { throw 'Installer .NET Framework 4.8 avant de continuer.' }
 $exeName = "ConnexionPont.$Role.exe"
@@ -24,7 +26,7 @@ New-Item -ItemType Directory -Path $menu -Force | Out-Null
 $shortcutFolders = @([Environment]::GetFolderPath('Desktop'),$menu)
 if ($DemarrerALOuvertureSession) { $shortcutFolders += [Environment]::GetFolderPath('Startup') }
 foreach ($folder in $shortcutFolders) {
-    $shortcut = $shell.CreateShortcut((Join-Path $folder "ConnexionPont - $Role.lnk"))
+    $shortcut = $shell.CreateShortcut((Join-Path $folder "ConnexionPont - $displayRole.lnk"))
     $shortcut.TargetPath = Join-Path $destinationFull $exeName
     $shortcut.WorkingDirectory = $destinationFull
     $shortcut.Save()

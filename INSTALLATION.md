@@ -1,172 +1,191 @@
-# Installation — ConnexionPont Windows V0.1
+# Installation et utilisation — ConnexionPont V0.2
 
-## 1. Prérequis et ports
+## 1. Identifier les deux PC
 
-Votre PC et le PC client : Windows 10/11 64 bits, .NET Framework 4.8 installé, comptes Windows habituels. Le PC client doit utiliser une édition Pro, Entreprise ou Éducation pour recevoir du RDP natif. L'accès SSH fonctionne indépendamment de cette édition.
-
-| Emplacement | Port par défaut | Destination / rôle |
+| Machine | Rôle dans ce guide | Programme |
 | --- | --- | --- |
-| Freebox, côté Internet | TCP 443 | Redirection vers le port 8443 du PC relais |
-| Votre PC relais | TCP 8443 | Écoute TLS de ConnexionPont |
-| Votre PC, boucle locale seulement | TCP 13389 | RDP du PC client, port 3389 |
-| Votre PC, boucle locale seulement | TCP 10022 | SSH du serveur interne, port 22 |
-| PC client, boucle locale | TCP 3389 | Service Bureau à distance Windows |
-| Serveur interne, depuis le PC client | TCP 22 | Service SSH existant |
+| Votre PC personnel, qui accède aux serveurs | Accès chez vous | ConnexionPont.Relais.exe |
+| PC Windows chez le client, déjà connecté à son réseau interne | Pont chez le client | ConnexionPont.Agent.exe |
 
-Le port **10022 n'est jamais à ouvrir sur le serveur interne**. Il n'existe que sur votre PC. Les ports 3389, 13389 et 10022 ne sont pas redirigés sur la Freebox.
+Le mot technique « Relais » de la V0.1 désigne le programme lancé **sur votre PC**, qui reçoit le tunnel. Le PC de pont exécute l'agent. Les noms des EXE et dossiers de configuration sont conservés pour les mises à jour.
 
-## 2. Installer les fichiers
+Prérequis : .NET Framework 4.8 déjà présent sur les deux PC ; Windows compatible et autorisation d'exécuter les EXE. Pour recevoir du RDP, le pont doit être sous Windows Pro, Entreprise ou Éducation, avec RDP déjà activé et votre compte autorisé. SSH et web fonctionnent indépendamment de RDP.
 
-Extraire complètement `ConnexionPont-Windows-v0.1.0.zip`. Ne pas exécuter directement depuis le ZIP. Conserver les fichiers `.exe.config` à côté des EXE.
+## 2. Installer ou lancer le poste Accès chez vous
 
-Option portable : lancer l'EXE correspondant directement depuis le dossier extrait.
+Extraire complètement `ConnexionPont-Windows-v0.2.0.zip`. Conserver chaque `.exe.config` à côté de son EXE.
 
-Option installation pour votre compte Windows, depuis le dossier extrait :
+Option portable : lancer directement `ConnexionPont.Relais.exe` depuis le dossier extrait.
+
+Option installation utilisateur, facultative :
 
 ```powershell
-# Chez vous
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Installer.ps1 -Role Relais
-
-# Sur le PC du client
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Installer.ps1 -Role Agent
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Installer.ps1 -Role Acces
 ```
 
-Le script copie l'application dans `%LOCALAPPDATA%\ConnexionPont\Applications\Relais` ou `Agent`, crée un raccourci sur le Bureau et dans le menu Démarrer. Aucun droit administrateur n'est requis pour cette copie. Il n'active ni RDP, ni règle de pare-feu, ni service système.
+`-Role Relais` reste accepté pour compatibilité. Le script crée les raccourcis et copie le programme dans `%LOCALAPPDATA%\ConnexionPont\Applications\Relais`. La copie ne demande pas de droits administrateur. Pour démarrer la fenêtre à l'ouverture de session, ajouter `-DemarrerALOuvertureSession` ; le bouton de connexion reste à actionner.
 
-Si l'exécution du logiciel est bloquée par une politique Windows ou un antivirus, faire valider le binaire par l'administrateur du poste. Les EXE de cette livraison ne sont pas signés Authenticode.
+## 3. Configurer votre poste Accès
 
-## 3. Configurer le relais chez vous
+Dans la fenêtre **Accès chez vous** :
 
-1. Lancer **ConnexionPont.Relais.exe**.
-2. Saisir votre **IP publique fixe** ou un nom DNS qui la désigne, sans `https://` et sans numéro de port.
-3. Conserver **port Internet 443**, **port d'écoute du relais 8443**, **RDP local 13389**, **SSH local 10022**, sauf conflit de ports.
-4. Renseigner l'IP interne ou le nom DNS du **serveur SSH**, tel qu'il est joignable depuis le PC client. Exemple : `172.20.58.14`. Le port cible est 22. Laisser vide désactive SSH.
-5. L'utilisateur SSH est utilisé seulement pour le bouton et la commande à copier. Vous pouvez aussi le saisir directement dans votre terminal.
-6. Cliquer **Enregistrer**. Les deux identités sont créées automatiquement ; aucune clé n'est préinstallée dans le ZIP.
-7. Cliquer **Exporter l'agent**. Choisir un mot de passe d'au moins 12 caractères, puis enregistrer `client.rdptunnel`.
+1. Saisir votre IP publique fixe ou un nom DNS, sans `https://` ni port.
+2. Conserver le port Internet **443**, le port d'écoute **8443**, le RDP local **13389** et le SSH local **10022**, sauf conflit.
+3. Renseigner le serveur SSH interne, tel qu'il est accessible depuis le pont. Son port reste **22**.
+4. Renseigner **Serveur web interne** avec l'IP du serveur qui héberge vos applications 8080 et 8090. Conserver **Proxy web local 1080**. Un champ serveur vide désactive l'accès correspondant.
+5. Cliquer **Enregistrer**. Les certificats sont créés au premier enregistrement et conservés ensuite.
+6. Cliquer **Exporter l'agent**, choisir un mot de passe d'au moins 12 caractères puis créer `client.rdptunnel`.
+7. Transmettre au pont l'EXE agent, son `.config` et le profil ; communiquer le mot de passe du profil séparément.
 
-Transmettre au PC client `ConnexionPont.Agent.exe`, son `.config` et le fichier `.rdptunnel`. Communiquer le mot de passe du profil séparément. Ne pas transmettre la configuration locale du relais.
+La configuration de votre poste est protégée pour votre compte Windows dans `%LOCALAPPDATA%\ConnexionPont\Relais\settings.bin`. Ne pas transmettre ce fichier au pont. Le profil exporté ne contient pas la clé privée du poste Accès.
 
-La configuration du relais est enregistrée dans `%LOCALAPPDATA%\ConnexionPont\Relais\settings.bin`, protégée pour votre compte Windows. Celle de l'agent est dans le dossier équivalent `Agent`.
+## 4. Freebox et pare-feu sur votre PC
 
-## 4. Freebox et pare-feu de votre PC
+Attribuer une IP LAN stable à votre PC dans la Freebox, de préférence avec un bail DHCP statique.
 
-1. Attribuer une IP LAN stable à votre PC relais, de préférence par un bail DHCP statique dans la Freebox. Exemple : `192.168.1.50`.
-2. Dans Freebox OS, ouvrir les paramètres avancés et **Gestion des ports**. Créer la règle suivante :
+Dans Freebox OS, paramètres avancés / Gestion des ports :
 
-| Champ | Valeur par défaut |
+| Paramètre | Valeur |
 | --- | --- |
-| IP de destination | IP LAN de votre PC relais, par exemple `192.168.1.50` |
+| IP de destination | IP LAN de votre PC Accès |
 | Protocole | TCP |
-| Port de début externe | 443 |
-| Port de fin externe | 443 |
-| Port de destination interne | 8443 |
+| Port externe début / fin | 443 / 443 |
+| Port interne de destination | 8443 |
 
-3. Vérifier que le port externe est disponible, notamment s'il sert déjà à l'administration distante de la Freebox ou à un autre équipement.
-4. Vérifier que votre plage de ports IPv4 autorise le port 443. Chez Free, l'option **IPv4 fixe full-stack** donne accès à tous les ports. Sa demande peut changer votre IP : relever la nouvelle IP et la reporter dans le relais, puis réexporter le profil.
-5. Ouvrir une fenêtre PowerShell **en administrateur** sur votre PC et autoriser uniquement le programme relais sur son port TLS :
+Vérifier que le port externe est disponible et compris dans votre plage IPv4. L'option Free **IPv4 fixe full-stack** donne accès à tous les ports et peut changer votre IP : relever la nouvelle IP et mettre à jour / réexporter le profil si nécessaire.
+
+Sur **votre PC**, ouvrir PowerShell **en administrateur**. Si vous avez utilisé Installer.ps1 :
 
 ```powershell
-# Si installé par Installer.ps1 pour le même compte Windows
-.\Configurer-PareFeu-Relais.ps1 -Port 8443
-
-# Si utilisé en portable, donner le chemin absolu de l'EXE
-.\Configurer-PareFeu-Relais.ps1 -Port 8443 -Programme 'C:\Outils\ConnexionPont\ConnexionPont.Relais.exe'
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Configurer-PareFeu-Relais.ps1 -Port 8443
 ```
 
-Ce script crée uniquement une règle entrante TCP pour le relais. Aucune modification automatique de votre Freebox n'est effectuée.
-
-6. Lancer **Démarrer le relais**. Votre PC doit rester allumé, connecté à Internet et éveillé pendant l'utilisation.
-
-## 5. Préparer le PC client
-
-1. Si vous souhaitez le RDP : activer **Paramètres > Système > Bureau à distance** avec les droits administrateur nécessaires, conserver l'authentification NLA et autoriser votre compte Windows. ConnexionPont ne modifie pas cette configuration.
-2. Vérifier que le PC peut joindre le serveur SSH sur le port 22. Depuis ce PC :
+Si le programme est lancé directement depuis le dossier extrait, exécuter cette commande depuis ce dossier :
 
 ```powershell
-Test-NetConnection -ComputerName IP_DU_SERVEUR_INTERNE -Port 22
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Configurer-PareFeu-Relais.ps1 -Port 8443 -Programme "$PWD\ConnexionPont.Relais.exe"
 ```
 
-3. Lancer **ConnexionPont.Agent.exe**, cliquer **Importer le profil**, sélectionner `.rdptunnel` et saisir son mot de passe.
-4. Cliquer **Diagnostic** : vérifier l'accès RDP local et l'accès SSH. Un échec RDP n'empêche pas l'utilisation de SSH.
-5. Cliquer **Connecter**. Les deux fenêtres doivent indiquer **CONNECTÉ**.
+L'option `-ExecutionPolicy Bypass` vaut uniquement pour ce processus PowerShell. Elle ne modifie pas la politique permanente du poste. Une politique imposée par l'organisation reste prioritaire : contacter l'administrateur si elle bloque la commande.
 
-L'agent ouvre la connexion vers votre IP publique, sur le port externe 443. Aucun port entrant sur la box du client n'est nécessaire. Le réseau du client doit autoriser cette connexion TLS directe. Un proxy HTTP obligatoire ou une inspection TLS nécessite une adaptation ; cette V0.1 ne fournit pas de prise en charge HTTP CONNECT.
+La règle autorise uniquement le port d'écoute TLS du programme. Aucun port RDP, SSH ou proxy local n'est publié sur la Freebox. Pour le web, **aucune redirection supplémentaire pour 8080, 8090 ou 1080** n'est nécessaire.
 
-## 6. Utiliser RDP et SSH depuis chez vous
+Cliquer **Démarrer l'accès**. Votre PC doit rester allumé et éveillé.
 
-### RDP vers le PC client
+## 5. PC de pont chez le client : sans installation ni droits administrateur
 
-Cliquer **Ouvrir RDP** dans le relais ou lancer :
+Cette procédure ne lance aucun installateur ni script PowerShell sur le pont.
+
+1. Sur le PC de pont, créer un dossier dans votre profil utilisateur, par exemple `Documents\ConnexionPont`.
+2. Y copier ces trois fichiers :
+
+| Fichier | Utilité |
+| --- | --- |
+| ConnexionPont.Agent.exe | Programme du pont |
+| ConnexionPont.Agent.exe.config | Configuration du runtime Windows |
+| client.rdptunnel | Profil chiffré exporté depuis votre PC Accès |
+
+3. Double-cliquer **ConnexionPont.Agent.exe**. La fenêtre porte le titre **Pont chez le client**.
+4. Cliquer **Importer le profil**, sélectionner `client.rdptunnel` et saisir son mot de passe.
+5. Cliquer **Diagnostic** pour vérifier les destinations autorisées. Un échec RDP ne bloque pas les fonctions SSH ou web.
+6. Cliquer **Connecter le pont**. Les fenêtres des deux PC doivent indiquer **CONNECTÉ**.
+7. Garder la fenêtre ouverte, le PC allumé et la session Windows ouverte. Verrouiller le poste conserve les processus ; fermer la session les arrête.
+
+Le programme enregistre son profil uniquement dans `%LOCALAPPDATA%\ConnexionPont\Agent\settings.bin`, chiffré pour votre compte Windows. Il n'installe pas de service, ne modifie pas le pare-feu ou le proxy système du pont et n'ajoute pas de certificat racine de confiance.
+
+.NET Framework 4.8 doit déjà être installé. Si ce prérequis manque, son installation relève de l'administrateur du poste. Le réseau du client doit autoriser la connexion sortante TLS du pont vers votre IP publique, port 443. Le transport n'est pas du HTTPS et ne prend pas en charge un proxy HTTP CONNECT obligatoire.
+
+Pour RDP, le service doit déjà être activé et le compte autorisé ; son activation nécessite un administrateur. **SSH et web ne nécessitent pas d'activer RDP**. Les destinations internes doivent être joignables depuis le pont : serveur SSH sur 22, serveur web sur 8080 / 8090.
+
+Pour retirer la version portable : fermer la fenêtre puis supprimer les fichiers copiés. Le profil enregistré se trouve dans le chemin ci-dessus ; le retirer si vous souhaitez supprimer l'appairage de ce compte utilisateur.
+
+Option installation utilisateur facultative si autorisée, sans élévation : `Installer.ps1 -Role Pont` (`-Role Agent` reste accepté). Cette option n'est pas nécessaire pour le mode portable.
+
+## 6. Utiliser RDP et SSH depuis votre PC
 
 ```powershell
+# Bureau du PC de pont
 mstsc /v:127.0.0.1:13389
-```
 
-Utiliser le compte du **PC client**, par exemple `DOMAINE\utilisateur` ou `NOMPC\utilisateur`. Le tunnel ne remplace pas l'identification Windows. Une session RDP sur un poste Windows peut verrouiller/déconnecter l'affichage local ; ce n'est pas du partage d'écran simultané comme un outil d'assistance.
-
-### SSH directement vers le serveur interne
-
-Depuis votre PowerShell / Windows Terminal :
-
-```powershell
+# SSH vers le serveur interne via le pont (le serveur écoute sur 22)
 ssh -p 10022 utilisateur@127.0.0.1
 
-# Clé conservée sur votre ordinateur
+# Clé SSH conservée sur votre PC
 ssh -i C:\Users\vous\.ssh\id_ed25519 -p 10022 utilisateur@127.0.0.1
 ```
 
-Le bouton **Copier la commande SSH** fournit une variante avec un `HostKeyAlias` propre au profil. Cette variante évite de confondre les empreintes si plusieurs serveurs sont utilisés successivement sur le même port local. Vérifier l'empreinte SSH avec celle communiquée par l'administrateur du serveur lors de la première connexion. Le bouton **Ouvrir SSH** utilise `ssh.exe` du PC relais.
+Les boutons **Ouvrir RDP**, **Ouvrir SSH** et **Copier la commande SSH** sont disponibles après connexion du pont. La commande copiée inclut un `HostKeyAlias` par profil pour distinguer les clés des serveurs. Vérifier l'empreinte SSH lors de la première connexion.
 
-RDP et SSH peuvent être utilisés simultanément. Le serveur interne continue d'écouter sur son port **22**, pas sur 10022.
+Les identifiants RDP sont ceux du pont. Les identifiants / clés SSH sont ceux du serveur interne. Aucun mot de passe RDP/SSH n'est enregistré par ConnexionPont. RDP sur un poste Windows peut verrouiller ou déconnecter l'affichage local.
 
-## 7. Reconnexion, démarrage et arrêt
+## 7. Navigateur vers les applications 8080 et 8090
 
-- Si Internet ou le relais est interrompu, l'agent réessaie après 1, 2, 4 secondes, puis jusqu'à 30 secondes entre les tentatives.
-- Une session RDP / SSH interrompue doit être rouverte après la reconnexion du tunnel.
-- **Arrêter** ou fermer la fenêtre coupe les sessions. Fermer une session Windows arrête l'application ; verrouiller le poste conserve les processus.
-- Pour démarrer la fenêtre à l'ouverture de votre session Windows, l'installation accepte `-DemarrerALOuvertureSession`. La connexion doit ensuite être lancée par le bouton. Cette version ne fonctionne pas avant l'ouverture de session Windows.
+1. Vérifier que **Serveur web interne** est renseigné sur votre poste Accès.
+2. Après enregistrement, exporter et réimporter le profil sur le pont ; connecter les deux côtés.
+3. Cliquer **Web 8080** ou **Web 8090** dans la fenêtre Accès chez vous.
+4. Une fenêtre Edge ou Chrome dédiée au tunnel s'ouvre. L'adresse est celle du serveur interne, avec son port d'origine. Vous pouvez saisir directement les deux URL dans **cette fenêtre**.
 
-## 8. Diagnostic et recette réelle
+Les connexions sont transportées vers le pont, qui contacte le serveur interne sur 8080 ou 8090. Les URL, les chemins, les cookies et les en-têtes Host ne sont pas réécrits. Les deux applications conservent leurs propres origines et ports. Le proxy transporte les flux TCP, y compris les échanges HTTP et les connexions mises à niveau telles que WebSocket.
+
+Le proxy local est `127.0.0.1:1080` par défaut. Le port 1080 n'est à ouvrir ni sur la Freebox, ni sur le serveur interne. Les seules destinations web autorisées sont le serveur du profil sur 8080 et 8090. Les liens vers d'autres serveurs / ports sont refusés par cette fenêtre ; utiliser votre navigateur habituel pour les autres sites.
+
+Le profil navigateur est distinct de votre profil habituel, dans `%LOCALAPPDATA%\ConnexionPont\Navigateur`. Les cookies peuvent y être conservés. Edge ou Chrome doit être présent sur **votre PC**, pas sur le pont. Une politique navigateur imposée peut empêcher l'application des paramètres de proxy ; vérifier les politiques si le navigateur n'utilise pas le tunnel.
+
+Cliquer sur les mêmes liens dans une fenêtre de navigateur ordinaire ne la configure pas automatiquement pour le tunnel. Ouvrir d'abord la fenêtre dédiée avec un des boutons web.
+
+## 8. Mise à jour depuis V0.1
+
+1. Prévoir un moyen de relancer le programme sur le pont : l'arrêt de l'agent interrompt une éventuelle session RDP utilisant ce tunnel.
+2. Fermer les applications des deux PC, remplacer **les deux EXE et leurs .config** par ceux de la V0.2. Les dossiers et clés existants sont conservés.
+3. Sur votre PC, relancer Accès, renseigner le serveur web et le port proxy local, puis enregistrer.
+4. Exporter un nouveau profil et l'importer sur le pont, puis connecter.
+
+Les certificats sont conservés. Les anciens profils restent lisibles mais ne configurent pas le web. La V0.2 utilise RDT2 : les deux exécutables doivent être mis à jour ensemble.
+
+## 9. Diagnostic
 
 | Symptôme | Vérification |
 | --- | --- |
-| Agent en attente / refus de connexion | IP publique actuelle, redirection Freebox, règle de pare-feu, relais démarré, PC éveillé |
-| Connexion depuis le LAN échoue mais depuis l'extérieur fonctionne | Tester depuis un autre réseau : le comportement de rebouclage NAT dépend de la configuration Freebox |
-| Port d'écoute déjà utilisé | Changer le port d'écoute du relais et le port interne de redirection ; le port externe peut rester 443 |
-| Certificat refusé | Vérifier date/heure, profil correct, certificats non expirés. Ne pas supprimer leur validation |
-| RDP échoue, tunnel connecté | Édition Windows du client, service RDP activé, accès `127.0.0.1:3389`, compte autorisé |
-| SSH échoue, tunnel connecté | IP interne, résolution DNS côté client, `Test-NetConnection ... -Port 22`, service SSH et identifiants |
-| Échec avec un proxy d'entreprise | Faire valider le transport TLS direct ; HTTP CONNECT non pris en charge dans la V0.1 |
+| Script bloqué par PowerShell | Utiliser la commande complète avec `powershell.exe -NoProfile -ExecutionPolicy Bypass -File` ; respecter les éventuelles politiques d'organisation |
+| Règle de pare-feu refusée | Ouvrir PowerShell en administrateur sur votre PC Accès et donner le chemin du véritable EXE utilisé |
+| Pont en attente | IP publique, Freebox, port d'écoute, règle Windows, PC Accès éveillé, version V0.2 sur les deux côtés |
+| Certificat refusé | Date/heure, profil correspondant et certificats non expirés ; conserver leur validation |
+| RDP échoue | Édition Windows, RDP déjà activé, compte autorisé, port local 3389 sur le pont |
+| SSH échoue | Adresse interne et port 22 joignables depuis le pont, identifiants / clé SSH |
+| Boutons web grisés | Serveur web vide, profil non réexporté / réimporté, ou pont non connecté |
+| Web inaccessible dans le navigateur habituel | Ouvrir la fenêtre dédiée avec Web 8080 / Web 8090 |
+| Web inaccessible dans la fenêtre dédiée | Diagnostic des ports 8080 / 8090 depuis le pont ; adresse du serveur dans le profil ; politique proxy Edge / Chrome |
+| Adresse déjà utilisée / port 1080 occupé | Choisir un autre port Proxy web local sur votre PC, enregistrer et redémarrer l'accès ; rouvrir le navigateur via les boutons |
 
-Pour la recette, connecter le PC client depuis un réseau réellement externe à votre Freebox. Vérifier successivement l'agent connecté, une session RDP réelle, `hostname` dans une session SSH réelle, le transfert d'un fichier de test si nécessaire, puis l'arrêt/reprise du relais. Aucun de ces contrôles sur votre infrastructure n'est réalisé automatiquement par cette livraison.
+Le diagnostic de l'agent vérifie les ports TCP, pas les identifiants applicatifs. Tester ensuite une session RDP réelle, `hostname` en SSH et les deux applications web depuis un réseau réellement externe à la Freebox.
 
-## 9. Mise à jour, révocation et désinstallation
+## 10. Arrêt, reprise, désinstallation
 
-Pour mettre à jour : fermer les applications, conserver une copie de l'ancienne livraison, puis relancer `Installer.ps1`. Les configurations ne sont pas écrasées. Pour revenir en arrière, réinstaller l'ancienne livraison après fermeture des applications.
+Fermer une fenêtre ou cliquer **Arrêter** coupe les sessions. Après une coupure réseau, le pont réessaie automatiquement jusqu'à 30 secondes entre tentatives. Les connexions RDP/SSH/web interrompues doivent être rouvertes.
 
-Pour changer le serveur SSH ou l'IP publique : arrêter les deux côtés, modifier/enregistrer le relais, réexporter le profil et le réimporter sur l'agent.
-
-Pour révoquer un ancien agent ou renouveler les certificats : arrêter les deux côtés, supprimer explicitement la configuration du relais avec `Desinstaller.ps1 -Role Relais -EffacerConfiguration`, réinstaller/créer un nouvel appairage et importer le nouveau profil sur l'agent. L'ancien certificat n'est plus accepté par le nouveau relais.
+Pour la version installée, fermer les EXE puis lancer, depuis le dossier contenant le script :
 
 ```powershell
-.\Desinstaller.ps1 -Role Agent
-.\Desinstaller.ps1 -Role Relais
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Desinstaller.ps1 -Role Acces
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Desinstaller.ps1 -Role Pont
 
-# Option explicite : supprimer aussi la configuration protégée
-.\Desinstaller.ps1 -Role Agent -EffacerConfiguration
+# Option explicite pour retirer aussi la configuration de ce compte Windows
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Desinstaller.ps1 -Role Pont -EffacerConfiguration
 ```
 
-Retirer ensuite la redirection Freebox si elle n'est plus utilisée. Pour retirer la règle Windows créée par le script, dans PowerShell administrateur :
+Pour retirer la règle entrante Windows, depuis un PowerShell administrateur :
 
 ```powershell
 Remove-NetFirewallRule -Name ConnexionPont-Relais-TLS
 ```
 
-Les certificats d'appairage expirent après deux ans. Prévoir leur renouvellement par réappairage. Une sauvegarde de `settings.bin` reste liée au compte Windows / profil DPAPI ; elle n'est pas une sauvegarde portable vers un autre ordinateur. La perte du PC relais implique un nouvel appairage.
+Retirer aussi la redirection Freebox si elle n'est plus utilisée. Les données du navigateur dédié sont conservées ; supprimer son dossier si vous souhaitez retirer ses cookies. Les certificats expirent au bout de deux ans. Pour renouveler / révoquer un pont : arrêter les deux côtés, retirer la configuration Accès avec l'option explicite ci-dessus, créer un nouvel appairage puis importer le nouveau profil sur le pont.
+
+Une sauvegarde de `settings.bin` reste liée au compte Windows / profil DPAPI ; la perte du PC Accès implique un nouvel appairage. Pour revenir à V0.1, remettre les EXE V0.1 des deux côtés, avec le web désactivé ; conserver l'ancienne livraison avant mise à jour.
 
 ## Références
 
-- Free : <https://assistance.free.fr/articles/1758> (IPv4 full-stack)
-- Free : <https://assistance.free.fr/articles/1395> (redirection de ports)
-- Microsoft : <https://learn.microsoft.com/windows-server/remote/remote-desktop-services/remotepc/remote-desktop-allow-access>
+- Free IPv4 full-stack : https://assistance.free.fr/articles/1758
+- Free redirection de ports : https://assistance.free.fr/articles/1395
+- Microsoft RDP : https://learn.microsoft.com/windows-server/remote/remote-desktop-services/remotepc/remote-desktop-allow-access
+- Microsoft proxy navigateur : https://learn.microsoft.com/deployedge/edge-learnmore-cmdline-options-proxy-settings

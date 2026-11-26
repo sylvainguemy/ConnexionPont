@@ -11,13 +11,15 @@ namespace RdpTunnel
     {
         private readonly X509Certificate2 identity;
         private readonly int rdpTargetPort;
+        private readonly int web8080TargetPort, web8090TargetPort;
         private int active;
         private volatile bool connected;
         public bool Connected { get { return connected; } }
         public int ActiveSessions { get { return active; } }
-        public Agent(Settings settings, Action<string> log) : this(settings, log, 3389) { }
-        internal Agent(Settings settings, Action<string> log, int testRdpPort) : base(settings, log)
-        { settings.Validate(false); identity = Security.LoadCertificate(settings.AgentPfx); rdpTargetPort = testRdpPort; }
+        public Agent(Settings settings, Action<string> log) : this(settings, log, 3389, 8080, 8090) { }
+        internal Agent(Settings settings, Action<string> log, int testRdpPort) : this(settings, log, testRdpPort, 8080, 8090) { }
+        internal Agent(Settings settings, Action<string> log, int testRdpPort, int testWeb8080Port, int testWeb8090Port) : base(settings, log)
+        { settings.Validate(false); identity = Security.LoadCertificate(settings.AgentPfx); rdpTargetPort = testRdpPort; web8080TargetPort = testWeb8080Port; web8090TargetPort = testWeb8090Port; }
 
         public Task Start() { return Task.Run((Func<Task>)Run); }
 
@@ -32,7 +34,7 @@ namespace RdpTunnel
                     Log("Connexion au relais " + Config.PublicHost + ":" + Config.PublicPort + "...");
                     socket = await Connect(Config.PublicHost, Config.PublicPort).ConfigureAwait(false);
                     wire = Authenticate(socket, identity, Config.RelayHash, false);
-                    wire.Send("RDT1 CONTROL");
+                    wire.Send(Wire.Protocol + " CONTROL");
                     if (wire.Read() != "READY") throw new InvalidDataException("Réponse du relais invalide.");
                     wire.Stream.ReadTimeout = 45000; connected = true; delay = 1000;
                     Log("Tunnel connecté et relais authentifié.");
@@ -52,9 +54,10 @@ namespace RdpTunnel
                     {
                         var line = wire.Read(); if (line == "PONG") continue;
                         var parts = line.Split(' '); Guid session;
-                        if (parts.Length != 3 || parts[0] != "OPEN" || !Guid.TryParseExact(parts[1], "N", out session) || (parts[2] != "RDP" && parts[2] != "SSH"))
+                        if (parts.Length != 3 || parts[0] != "OPEN" || !Guid.TryParseExact(parts[1], "N", out session)
+                            || (parts[2] != "RDP" && parts[2] != "SSH" && parts[2] != "WEB8080" && parts[2] != "WEB8090"))
                             throw new InvalidDataException("Commande de session invalide.");
-                        if (Interlocked.Increment(ref active) > 8) { Interlocked.Decrement(ref active); continue; }
+                        if (Interlocked.Increment(ref active) > Wire.MaxSessions) { Interlocked.Decrement(ref active); continue; }
                         var id = parts[1]; var service = parts[2];
                         Task.Run(() => OpenSession(id, service));
                     }
@@ -83,13 +86,20 @@ namespace RdpTunnel
             TcpClient target = null, remote = null; Wire wire = null;
             try
             {
-                var host = service == "RDP" ? "127.0.0.1" : Config.SshHost;
-                var port = service == "RDP" ? rdpTargetPort : Config.SshPort;
-                if (string.IsNullOrWhiteSpace(host)) throw new IOException("Le serveur SSH n'est pas configuré.");
+                string host; int port;
+                switch (service)
+                {
+                    case "RDP": host = "127.0.0.1"; port = rdpTargetPort; break;
+                    case "SSH": host = Config.SshHost; port = Config.SshPort; break;
+                    case "WEB8080": host = Config.WebHost; port = web8080TargetPort; break;
+                    case "WEB8090": host = Config.WebHost; port = web8090TargetPort; break;
+                    default: throw new InvalidDataException("Destination non autorisée.");
+                }
+                if (string.IsNullOrWhiteSpace(host)) throw new IOException("La destination " + service + " n'est pas configurée.");
                 target = await Connect(host, port).ConfigureAwait(false);
                 remote = await Connect(Config.PublicHost, Config.PublicPort).ConfigureAwait(false);
                 wire = Authenticate(remote, identity, Config.RelayHash, false);
-                wire.Send("RDT1 DATA " + id);
+                wire.Send(Wire.Protocol + " DATA " + id);
                 if (wire.Read() != "GO") throw new InvalidDataException("Session refusée.");
                 wire.Stream.ReadTimeout = System.Threading.Timeout.Infinite;
                 Log(service + " : destination connectée.");

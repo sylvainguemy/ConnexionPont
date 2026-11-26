@@ -17,37 +17,39 @@ namespace RdpTunnel
         private Relay relay;
         private Agent agent;
         private Task agentTask;
-        private readonly TextBox host = new TextBox(), sshHost = new TextBox(), sshUser = new TextBox();
+        private readonly TextBox host = new TextBox(), sshHost = new TextBox(), sshUser = new TextBox(), webHost = new TextBox();
         private readonly NumericUpDown publicPort = Port(443), listenPort = Port(8443), rdpPort = Port(13389), sshPort = Port(10022);
+        private readonly NumericUpDown webProxyPort = Port(1080);
         private readonly RichTextBox journal = new RichTextBox();
         private readonly Label status = new Label(), summary = new Label(), command = new Label();
         private readonly FlowLayoutPanel actions = new FlowLayoutPanel();
         private readonly TableLayoutPanel fields = new TableLayoutPanel();
         private readonly Button start = new Button(), stop = new Button(), rdp = new Button(), ssh = new Button(), export = new Button();
+        private readonly Button web8080 = new Button(), web8090 = new Button();
         private readonly Timer timer = new Timer();
         private bool busy;
 
         public TunnelForm(bool relayMode)
         {
             isRelay = relayMode;
-            Text = "ConnexionPont — " + (isRelay ? "Relais chez vous" : "Agent chez le client");
-            Size = new Size(970, 780); MinimumSize = new Size(850, 730);
+            Text = "ConnexionPont — " + (isRelay ? "Accès chez vous" : "Pont chez le client");
+            Size = new Size(1020, 830); MinimumSize = new Size(980, 790);
             StartPosition = FormStartPosition.CenterScreen;
             Font = new Font("Segoe UI", 10); BackColor = Color.FromArgb(245, 247, 251);
             AutoScaleMode = AutoScaleMode.Dpi;
             settingsPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ConnexionPont", isRelay ? "Relais" : "Agent", "settings.bin");
             var layout = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 7, ColumnCount = 1, Padding = new Padding(22) };
             layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 70));
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, isRelay ? 220 : 120));
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, isRelay ? 260 : 155));
             layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
             layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
             layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 56));
             layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
             Controls.Add(layout);
-            var title = new Label { Text = "ConnexionPont  /  " + (isRelay ? "RELAIS" : "AGENT"), Font = new Font("Segoe UI", 22, FontStyle.Bold), ForeColor = Color.FromArgb(25, 58, 105), Dock = DockStyle.Fill };
+            var title = new Label { Text = "ConnexionPont  /  " + (isRelay ? "ACCÈS CHEZ VOUS" : "PONT CHEZ LE CLIENT"), Font = new Font("Segoe UI", 22, FontStyle.Bold), ForeColor = Color.FromArgb(25, 58, 105), Dock = DockStyle.Fill };
             layout.Controls.Add(title, 0, 0);
-            fields.Dock = DockStyle.Fill; fields.ColumnCount = 4; fields.RowCount = 4;
+            fields.Dock = DockStyle.Fill; fields.ColumnCount = 4; fields.RowCount = 5;
             fields.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 180)); fields.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 60));
             fields.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 170)); fields.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 40));
             if (isRelay)
@@ -58,6 +60,7 @@ namespace RdpTunnel
                 AddField("Utilisateur SSH", sshUser, 0, 3);
                 var note = new Label { Text = "SSH cible : 22. Laissez le serveur vide pour désactiver SSH.", AutoSize = false, Dock = DockStyle.Fill, ForeColor = Color.DimGray };
                 fields.Controls.Add(note, 2, 3); fields.SetColumnSpan(note, 2);
+                AddField("Serveur web interne", webHost, 0, 4); AddField("Proxy web local", webProxyPort, 2, 4);
                 layout.Controls.Add(fields, 0, 1);
             }
             else
@@ -68,7 +71,7 @@ namespace RdpTunnel
             actions.Dock = DockStyle.Fill; actions.WrapContents = false;
             if (isRelay) AddButton("Enregistrer", async delegate { await SaveSettings(); }, null);
             else AddButton("Importer le profil", async delegate { await ImportProfile(); }, null);
-            AddButton(isRelay ? "Démarrer le relais" : "Connecter", async delegate { await StartEngine(); }, start);
+            AddButton(isRelay ? "Démarrer l'accès" : "Connecter le pont", async delegate { await StartEngine(); }, start);
             AddButton("Arrêter", delegate { StopEngine(); }, stop);
             if (isRelay) AddButton("Exporter l'agent", async delegate { await ExportProfile(); }, export);
             else AddButton("Diagnostic", async delegate { await Diagnostics(); }, null);
@@ -83,6 +86,8 @@ namespace RdpTunnel
                 var copy = new Button { Text = "Copier la commande SSH" }; StyleButton(copy);
                 copy.Click += delegate { Guard(delegate { Clipboard.SetText(SshCommand()); WriteLog("Commande SSH copiée."); }); };
                 links.Controls.Add(copy); layout.Controls.Add(links, 0, 4);
+                web8080.Text = "Web 8080"; StyleButton(web8080); web8080.Click += delegate { Guard(delegate { OpenWeb(8080); }); }; links.Controls.Add(web8080);
+                web8090.Text = "Web 8090"; StyleButton(web8090); web8090.Click += delegate { Guard(delegate { OpenWeb(8090); }); }; links.Controls.Add(web8090);
             }
             else
             {
@@ -93,7 +98,7 @@ namespace RdpTunnel
             journal.ReadOnly = true; journal.Dock = DockStyle.Fill; journal.BackColor = Color.White;
             journal.Font = new Font("Consolas", 9); journal.BorderStyle = BorderStyle.FixedSingle;
             journal.DetectUrls = false; layout.Controls.Add(journal, 0, 5);
-            var footer = new Label { Text = "TLS 1.2 • certificats appairés • accès locaux RDP / SSH • fermeture = arrêt du tunnel", Dock = DockStyle.Fill, ForeColor = Color.DimGray, TextAlign = ContentAlignment.BottomLeft };
+            var footer = new Label { Text = "V0.2 • TLS 1.2 • RDP / SSH / Web • fermeture = arrêt du tunnel", Dock = DockStyle.Fill, ForeColor = Color.DimGray, TextAlign = ContentAlignment.BottomLeft };
             layout.Controls.Add(footer, 0, 6);
             Shown += delegate
             {
@@ -143,8 +148,10 @@ namespace RdpTunnel
         {
             host.Text = settings.PublicHost; publicPort.Value = settings.PublicPort; listenPort.Value = settings.ListenPort;
             rdpPort.Value = settings.LocalRdpPort; sshPort.Value = settings.LocalSshPort; sshHost.Text = settings.SshHost;
+            webHost.Text = settings.WebHost; webProxyPort.Value = settings.LocalWebProxyPort;
             summary.Text = "Relais : " + settings.PublicHost + ":" + settings.PublicPort + Environment.NewLine + Environment.NewLine
-                + "RDP : ce PC, port 3389" + Environment.NewLine + "SSH : " + (string.IsNullOrWhiteSpace(settings.SshHost) ? "désactivé" : settings.SshHost + ":" + settings.SshPort);
+                + "RDP : ce PC, port 3389" + Environment.NewLine + "SSH : " + (string.IsNullOrWhiteSpace(settings.SshHost) ? "désactivé" : settings.SshHost + ":" + settings.SshPort)
+                + Environment.NewLine + "Web : " + (string.IsNullOrWhiteSpace(settings.WebHost) ? "désactivé" : settings.WebHost + " — ports 8080 et 8090");
         }
         private async Task SaveSettings()
         {
@@ -153,7 +160,9 @@ namespace RdpTunnel
             try
             {
                 var address = host.Text.Trim(); var target = sshHost.Text.Trim();
+                var webTarget = webHost.Text.Trim(); var proxyPort = (int)webProxyPort.Value;
                 Settings.CheckHost(address, "IP publique / DNS"); if (target.Length > 0) Settings.CheckHost(target, "Serveur SSH");
+                if (webTarget.Length > 0) Settings.CheckHost(webTarget, "Serveur web interne");
                 var pub = (int)publicPort.Value; var listen = (int)listenPort.Value; var rp = (int)rdpPort.Value; var sp = (int)sshPort.Value;
                 if (settings == null) settings = await Task.Run(() => Security.CreatePair(address, pub, listen, rp, sp, target));
                 else
@@ -161,9 +170,10 @@ namespace RdpTunnel
                     settings.PublicHost = address; settings.PublicPort = pub; settings.ListenPort = listen;
                     settings.LocalRdpPort = rp; settings.LocalSshPort = sp; settings.SshHost = target;
                 }
+                settings.WebHost = webTarget; settings.LocalWebProxyPort = proxyPort;
                 settings.Validate(true); settings.Save(settingsPath); DisplaySettings();
                 WriteLog("Configuration enregistrée. Freebox : TCP Internet " + pub + " vers ce PC, port " + listen + ".");
-                WriteLog("Après modification de l'adresse ou de la cible SSH, exportez puis réimportez le profil agent.");
+                WriteLog("Après modification des destinations SSH / web, exportez puis réimportez le profil sur le pont.");
             }
             catch (Exception error) { ShowError(error); }
             finally { busy = false; UpdateState(); }
@@ -239,6 +249,7 @@ namespace RdpTunnel
             start.Enabled = settings != null && !running && !busy; stop.Enabled = running;
             if (isRelay) export.Enabled = settings != null && !busy;
             rdp.Enabled = connected; ssh.Enabled = connected && settings != null && !string.IsNullOrWhiteSpace(settings.SshHost);
+            web8080.Enabled = web8090.Enabled = connected && settings != null && !string.IsNullOrWhiteSpace(settings.WebHost);
             status.Text = busy ? "Préparation..." : connected ? "CONNECTÉ — " + (isRelay ? relay.ActiveSessions : agent.ActiveSessions) + " session(s) active(s)" : running ? "EN ATTENTE — connexion / reconnexion" : "ARRÊTÉ";
             status.ForeColor = connected ? Color.FromArgb(15, 119, 74) : Color.FromArgb(150, 92, 12);
         }
@@ -253,11 +264,22 @@ namespace RdpTunnel
         }
         private string SshCommand() { return "ssh " + SshArguments(); }
         private void OpenSsh() { Process.Start(new ProcessStartInfo("ssh.exe", SshArguments()) { UseShellExecute = true }); }
+        private void OpenWeb(int port)
+        {
+            if (relay == null || !relay.AgentConnected) throw new InvalidOperationException("Connectez d'abord le pont.");
+            WebBrowserLauncher.Open(settings, port);
+            WriteLog("Navigateur du tunnel ouvert vers " + settings.WebHost + ":" + port + ". Utilisez cette fenêtre pour les accès web internes.");
+        }
         private async Task Diagnostics()
         {
             if (settings == null) { WriteLog("Importez d'abord un profil."); return; }
             WriteLog("Diagnostic RDP local : " + await Probe("127.0.0.1", 3389));
             if (!string.IsNullOrWhiteSpace(settings.SshHost)) WriteLog("Diagnostic SSH " + settings.SshHost + ":" + settings.SshPort + " : " + await Probe(settings.SshHost, settings.SshPort));
+            if (!string.IsNullOrWhiteSpace(settings.WebHost))
+            {
+                WriteLog("Diagnostic Web " + settings.WebHost + ":8080 : " + await Probe(settings.WebHost, 8080));
+                WriteLog("Diagnostic Web " + settings.WebHost + ":8090 : " + await Probe(settings.WebHost, 8090));
+            }
         }
         private static async Task<string> Probe(string address, int port)
         {

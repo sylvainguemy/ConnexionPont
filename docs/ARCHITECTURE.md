@@ -1,4 +1,4 @@
-# Architecture et périmètre V0.1
+# Architecture et périmètre V0.2
 
 | Confirmé | Hypothèse à vérifier | Bloquant pour la recette réelle |
 | --- | --- | --- |
@@ -11,22 +11,24 @@
 
 C# / .NET Framework 4.8, WinForms et bibliothèques Windows uniquement : deux EXE légers, sans téléchargement de dépendances pendant l'installation. Le transport utilise les primitives TLS standard `SslStream` / Schannel, sans protocole de chiffrement réseau inventé. La V0.1 n'intègre pas Chisel.
 
-Le relais écoute sur toutes les interfaces IPv4 sur TCP 8443 et deux listeners de données uniquement sur `127.0.0.1` (13389 / 10022). La Freebox redirige TCP 443 vers le port d'écoute du relais. L'agent initie toutes les connexions vers le relais.
+Le poste Accès (EXE Relais) écoute sur toutes les interfaces IPv4 sur TCP 8443 et sur trois ports de données uniquement en boucle locale : RDP 13389, SSH 10022 et proxy web SOCKS5 1080. La Freebox redirige TCP 443 vers le port d'écoute du poste Accès. Le pont (EXE Agent) initie toutes les connexions vers le poste Accès.
 
-## Contrat réseau RDT1
+Les ports 8080 et 8090 du serveur web configuré sont les seules destinations acceptées par SOCKS5. Chaque demande CONNECT validée devient une commande WEB8080 ou WEB8090 ; le pont choisit lui-même la destination fixe du profil. Le navigateur est ouvert dans un profil séparé avec un proxy SOCKS5 explicite, sans réglage proxy global. Cela conserve les URL, les en-têtes Host, les cookies et le transport TCP des applications, y compris les connexions WebSocket.
+
+## Contrat réseau RDT2
 
 Chaque connexion est authentifiée mutuellement par TLS 1.2 avant la lecture de commandes ASCII. Les empreintes SHA-256 des deux certificats sont fixées lors de l'appairage, sans dépendance à une autorité racine publique. Leur validité temporelle est contrôlée.
 
 | Canal / commande | Sens | Effet |
 | --- | --- | --- |
-| `RDT1 CONTROL` puis `READY` | Agent vers relais, puis réponse | Enregistre l'unique agent connecté |
+| `RDT2 CONTROL` puis `READY` | Agent vers relais, puis réponse | Enregistre l'unique agent connecté |
 | `PING` / `PONG` | Agent / relais | Maintient la connexion ; délai de lecture 45 s |
-| `OPEN <id> RDP` ou `OPEN <id> SSH` | Relais vers agent | Demande une connexion à l'une des deux destinations du profil |
-| `RDT1 DATA <id>` puis `GO` | Agent vers relais, puis réponse | Associe le flux à une demande en cours, puis transmet les octets bruts |
+| `OPEN <id> RDP / SSH / WEB8080 / WEB8090` | Relais vers agent | Demande une connexion à l'une des destinations autorisées |
+| `RDT2 DATA <id>` puis `GO` | Agent vers relais, puis réponse | Associe le flux à une demande en cours, puis transmet les octets bruts |
 
-Les identifiants de session sont des GUID de 128 bits ; seul un agent possédant le certificat appairé peut fournir un canal DATA. Les connexions inconnues, les sessions rejouées et les commandes trop longues sont fermées. Aucun hôte ni port arbitraire n'est accepté via le protocole ; la destination SSH est fixée par le profil agent, le RDP est fixé à `127.0.0.1:3389`.
+Les identifiants de session sont des GUID de 128 bits ; seul un agent possédant le certificat appairé peut fournir un canal DATA. Les connexions inconnues, les sessions rejouées et les commandes trop longues sont fermées. Aucun hôte ni port arbitraire n'est accepté via le protocole ; SSH est fixé par le profil, RDP à `127.0.0.1:3389`, WEB8080 et WEB8090 au serveur web du profil. Les deux EXE doivent être mis à jour ensemble. Les profils V0.1 restent lisibles ; leurs nouveaux champs web ont des valeurs par défaut sans recréation de clés.
 
-Délais : connexion TCP 10 s ; négociation TLS / première commande 10 s ; contrôle 45 s ; ouverture d'une destination 20 s. Huit sessions de données, 24 négociations entrantes simultanées maximum. La fermeture du canal de contrôle ferme les sessions associées. Après arrêt de la connexion, les sockets suivis sont fermés.
+Délais : connexion TCP 10 s ; négociation TLS / première commande 10 s ; contrôle 45 s ; ouverture d'une destination 20 s ; requête SOCKS locale 5 s. 32 sessions de données, 24 négociations entrantes simultanées maximum. La fermeture du canal de contrôle ferme les sessions associées. Après arrêt de la connexion, les sockets suivis sont fermés.
 
 ## Configuration et fichiers
 

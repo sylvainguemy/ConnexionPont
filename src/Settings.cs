@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Net;
 using System.Runtime.Serialization;
@@ -20,21 +21,34 @@ namespace RdpTunnel
         [DataMember] public int LocalSshPort = 10022;
         [DataMember] public string SshHost = "";
         [DataMember] public int SshPort = 22;
+        [DataMember] public string WebHost = "";
+        [DataMember] public int LocalWebProxyPort = 1080;
         [DataMember] public byte[] RelayPfx;
         [DataMember] public byte[] AgentPfx;
         [DataMember] public string RelayHash;
         [DataMember] public string AgentHash;
         [DataMember] public string PairId;
 
+        [OnDeserializing]
+        private void SetNewDefaults(StreamingContext context)
+        {
+            // DataContractJsonSerializer does not execute field initializers.
+            // Existing V0.1 settings remain usable without regenerating keys.
+            WebHost = ""; LocalWebProxyPort = 1080;
+        }
+
         public void Validate(bool relay)
         {
             if (Version != 1) throw new InvalidDataException("Version de configuration inconnue.");
             CheckHost(PublicHost, "IP publique ou nom DNS");
             CheckPort(PublicPort); CheckPort(ListenPort);
-            CheckPort(LocalRdpPort); CheckPort(LocalSshPort); CheckPort(SshPort);
-            if (LocalRdpPort == LocalSshPort || LocalRdpPort == ListenPort || LocalSshPort == ListenPort)
-                throw new InvalidDataException("Les ports d'écoute, RDP local et SSH local doivent être différents.");
+            CheckPort(LocalRdpPort); CheckPort(LocalSshPort); CheckPort(SshPort); CheckPort(LocalWebProxyPort);
+            var ports = new HashSet<int>();
+            if (!ports.Add(ListenPort) || !ports.Add(LocalRdpPort) || !ports.Add(LocalSshPort)
+                || (!string.IsNullOrWhiteSpace(WebHost) && !ports.Add(LocalWebProxyPort)))
+                throw new InvalidDataException("Les ports d'écoute, RDP, SSH et proxy web locaux doivent être différents.");
             if (!string.IsNullOrWhiteSpace(SshHost)) CheckHost(SshHost, "Serveur SSH");
+            if (!string.IsNullOrWhiteSpace(WebHost)) CheckHost(WebHost, "Serveur web interne");
             if (AgentPfx == null || AgentPfx.Length == 0 || (relay && (RelayPfx == null || RelayPfx.Length == 0)))
                 throw new InvalidDataException("Certificat privé manquant.");
             if (RelayHash == null || RelayHash.Length != 64 || AgentHash == null || AgentHash.Length != 64)
