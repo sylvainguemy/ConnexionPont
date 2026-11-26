@@ -22,8 +22,12 @@ $installScripts = @('Configurer-PareFeu-Relais.ps1','Verifier-Agent.ps1','Instal
 foreach ($name in $installScripts) {
     if (Test-Path -LiteralPath (Join-Path $PSScriptRoot $name)) { Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination $output }
 }
+New-Item -ItemType Directory -Path (Join-Path $output 'docs') -Force | Out-Null
+foreach ($name in @('ARCHITECTURE.md','VALIDATION.md')) {
+    Copy-Item -LiteralPath (Join-Path $projectRoot "docs\$name") -Destination (Join-Path $output "docs\$name") -Force
+}
 $archive = Join-Path $projectRoot 'dist\ConnexionPont-Windows-v0.1.0.zip'
-$deliveryNames = @('ConnexionPont.Relais.exe','ConnexionPont.Relais.exe.config','ConnexionPont.Agent.exe','ConnexionPont.Agent.exe.config','README.md','INSTALLATION.md','LICENSE','CHANGELOG.md') + $installScripts
+$deliveryNames = @('ConnexionPont.Relais.exe','ConnexionPont.Relais.exe.config','ConnexionPont.Agent.exe','ConnexionPont.Agent.exe.config','README.md','INSTALLATION.md','LICENSE','CHANGELOG.md','docs') + $installScripts
 $deliveryPaths = $deliveryNames | ForEach-Object { Join-Path $output $_ } | Where-Object { Test-Path -LiteralPath $_ }
 Compress-Archive -LiteralPath $deliveryPaths -DestinationPath $archive -Force
 Get-FileHash -LiteralPath $archive -Algorithm SHA256 | Format-List
